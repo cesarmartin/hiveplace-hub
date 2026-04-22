@@ -4,6 +4,8 @@ import { IdempotencyService } from '../../src/webhooks/idempotency.service';
 import { HmacGuard } from '../../src/webhooks/hmac.guard';
 import { PluggyAdapter } from '../../src/webhooks/adapters/pluggy.adapter';
 import { BelvoAdapter } from '../../src/webhooks/adapters/belvo.adapter';
+import { InMemoryQueue } from '../../src/queue/in-memory.queue';
+import { NormalizationJob } from '../../src/queue/queue.module';
 
 /**
  * Integration tests for the webhook flow with mocked adapters.
@@ -15,11 +17,15 @@ describe('Webhook Flow Integration', () => {
   let idempotencyService: jest.Mocked<IdempotencyService>;
   let pluggyAdapter: PluggyAdapter;
   let belvoAdapter: BelvoAdapter;
+  let mockQueue: InMemoryQueue<NormalizationJob>;
 
   beforeEach(async () => {
     const mockIdempotencyService = {
       reserve: jest.fn(),
+      release: jest.fn(),
     };
+
+    mockQueue = new InMemoryQueue<NormalizationJob>({ maxSize: 1000 });
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [WebhooksController],
@@ -27,6 +33,10 @@ describe('Webhook Flow Integration', () => {
         {
           provide: IdempotencyService,
           useValue: mockIdempotencyService,
+        },
+        {
+          provide: InMemoryQueue,
+          useValue: mockQueue,
         },
         PluggyAdapter,
         BelvoAdapter,

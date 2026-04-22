@@ -25,4 +25,16 @@ export class IdempotencyService {
       throw err;
     }
   }
+
+  /**
+   * Release an idempotency key — deletes the record so the provider
+   * can retry the event. Used when normalization/persistence fails
+   * permanently and we want to allow reprocessing.
+   */
+  async release(provider: string, eventId: string): Promise<void> {
+    const key = `${provider}:${eventId}`;
+    await this.prisma.idempotencyKey.delete({ where: { key } }).catch(() => {
+      // Ignore if key doesn't exist
+    });
+  }
 }

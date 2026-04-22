@@ -2,15 +2,21 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HttpStatus } from '@nestjs/common';
 import { WebhooksController } from '../../src/webhooks/webhooks.controller';
 import { IdempotencyService } from '../../src/webhooks/idempotency.service';
+import { InMemoryQueue } from '../../src/queue/in-memory.queue';
+import { NormalizationJob } from '../../src/queue/queue.module';
 
 describe('WebhooksController', () => {
   let controller: WebhooksController;
   let idempotencyService: jest.Mocked<IdempotencyService>;
+  let mockQueue: InMemoryQueue<NormalizationJob>;
 
   beforeEach(async () => {
     const mockIdempotencyService = {
       reserve: jest.fn(),
+      release: jest.fn(),
     };
+
+    mockQueue = new InMemoryQueue<NormalizationJob>({ maxSize: 1000 });
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [WebhooksController],
@@ -18,6 +24,10 @@ describe('WebhooksController', () => {
         {
           provide: IdempotencyService,
           useValue: mockIdempotencyService,
+        },
+        {
+          provide: InMemoryQueue,
+          useValue: mockQueue,
         },
       ],
     }).compile();

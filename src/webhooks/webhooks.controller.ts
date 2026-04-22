@@ -18,13 +18,18 @@ import {
 import { HmacGuard } from './hmac.guard';
 import { IdempotencyService } from './idempotency.service';
 import { webhookReceivedCounter } from '../common/metrics/metrics.controller';
+import { InMemoryQueue } from '../queue/in-memory.queue';
+import { NormalizationJob } from '../queue/queue.module';
 
 @ApiTags('webhooks')
 @Controller('webhooks')
 export class WebhooksController {
   private readonly logger = new Logger(WebhooksController.name);
 
-  constructor(private readonly idem: IdempotencyService) {}
+  constructor(
+    private readonly idem: IdempotencyService,
+    private readonly queue: InMemoryQueue<NormalizationJob>,
+  ) {}
 
   /**
    * Receives a webhook from a specific provider.
@@ -72,8 +77,19 @@ export class WebhooksController {
     webhookReceivedCounter.inc({ provider, outcome: 'queued' });
     this.logger.log({ provider, eventId }, 'webhook accepted');
 
-    // TODO (next bloc): enqueue for async normalization + persistence.
-    // Keeping the handler fast (202) so providers don't retry.
+    // Enqueue for async normalization + persistence
+    const enqueued = this.queue.enqueue({
+      provider,
+      rawPayload: JSON.stringify(body),
+      eventId: String(eventId),
+    });
+
+    if (!enqueued) {
+      this.logger.error({ provider, eventId }, 'queue overflow — job rejected');
+      // Release the idempotency key so provider can retry
+      await this.idem.release(provider, String(eventId));
+      return { status: 'accepted', note: 'queue overflow' };
+    }
 
     return { status: 'accepted', eventId };
   }

@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { QueueModule } from './queue/queue.module';
+import { SyncModule } from './sync/sync.module';
+import { TransactionsModule } from './transactions/transactions.module';
 import { HealthController } from './common/health.controller';
 import { MetricsController } from './common/metrics/metrics.controller';
 import { PrismaService } from './common/prisma.service';
@@ -27,6 +30,9 @@ import { PrismaService } from './common/prisma.service';
       },
     }),
     WebhooksModule,
+    QueueModule,
+    SyncModule,
+    TransactionsModule,
   ],
   controllers: [HealthController, MetricsController],
   providers: [PrismaService],
