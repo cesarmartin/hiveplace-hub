@@ -1,0 +1,57 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hiveplace-app
+    ports:
+      - "3300:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      LOG_LEVEL: info
+      DATABASE_URL: "file:/data/hiveplace.db"
+      PLUGGY_WEBHOOK_SECRET: ${PLUGGY_WEBHOOK_SECRET:-dev-pluggy-secret}
+      BELVO_WEBHOOK_SECRET: ${BELVO_WEBHOOK_SECRET:-dev-belvo-secret}
+      API_KEY: ${API_KEY:-dev-api-key}
+      PLUGGY_MOCK_URL: http://pluggy-mock:4001
+      BELVO_MOCK_URL: http://belvo-mock:4002
+    volumes:
+      - sqlite-data:/data
+    depends_on:
+      - pluggy-mock
+      - belvo-mock
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  pluggy-mock:
+    build:
+      context: .
+      dockerfile: Dockerfile.mocks
+    container_name: hiveplace-pluggy-mock
+    command: ["npx", "ts-node", "mocks/pluggy-mock.ts"]
+    ports:
+      - "4001:4001"
+    environment:
+      PORT: 4001
+      HUB_URL: http://app:3000
+      PLUGGY_WEBHOOK_SECRET: ${PLUGGY_WEBHOOK_SECRET:-dev-pluggy-secret}
+
+  belvo-mock:
+    build:
+      context: .
+      dockerfile: Dockerfile.mocks
+    container_name: hiveplace-belvo-mock
+    command: ["npx", "ts-node", "mocks/belvo-mock.ts"]
+    ports:
+      - "4002:4002"
+    environment:
+      PORT: 4002
+      HUB_URL: http://app:3000
+      BELVO_WEBHOOK_SECRET: ${BELVO_WEBHOOK_SECRET:-dev-belvo-secret}
+
+volumes:
+  sqlite-data:

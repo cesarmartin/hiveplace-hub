@@ -1,0 +1,40 @@
+// Canonical schema for the integration hub.
+// SQLite chosen for pragmatic reasons: zero-setup, adequate for the challenge scope.
+// Trade-off documented in DECISIONS.md — swappable to Postgres via DATABASE_URL.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Canonical transaction model — the output of normalizing heterogeneous provider payloads.
+model Transaction {
+  id            String   @id @default(uuid())
+  externalId    String   // provider-side id, used for dedupe
+  provider      String   // "pluggy" | "belvo"
+  accountId     String
+  amountCents   Int      // normalized to integer cents to avoid float drift
+  currency      String   // ISO 4217
+  type          String   // "CREDIT" | "DEBIT"
+  status        String   // canonical: "PENDING" | "POSTED" | "FAILED"
+  occurredAt    DateTime
+  receivedAt    DateTime @default(now())
+  rawPayload    String   // original payload JSON string — audit trail
+
+  @@unique([provider, externalId])
+  @@index([accountId])
+  @@index([status])
+  @@index([occurredAt])
+}
+
+// Idempotency ledger for webhook processing.
+// Prevents double-processing when a provider retries delivery.
+model IdempotencyKey {
+  key       String   @id // format: "{provider}:{event_id}"
+  createdAt DateTime @default(now())
+}
