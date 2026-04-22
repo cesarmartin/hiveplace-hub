@@ -107,6 +107,77 @@ docker compose up --build
 
 **Importante:** Mantenha esta janela do terminal aberta enquanto testa. Os serviços estão rodando!
 
+### 🔐 Autenticação por API Key
+
+Os endpoints internos da API são protegidos por autenticação via API Key. Isso garante que apenas consumidores autorizados possam acessar as operações de transação e sincronização.
+
+#### O que é uma API Key?
+
+Uma API Key é uma string única que identifica o cliente fazendo a requisição. É como uma "senha" que você inclui no header da requisição para provar que tem permissão para usar o endpoint.
+
+#### Quais Endpoints Precisam de Autenticação?
+
+| Endpoint | Método | Descrição |
+|----------|--------|-----------|
+| `/transactions` | GET | Listar todas as transações |
+| `/transactions/:id` | GET | Buscar uma transação específica |
+| `/sync/:accountId` | POST | Sincronizar transações de uma conta |
+
+#### Quais Endpoints NÃO Precisam de Autenticação?
+
+- `/webhooks/:provider` - Recebimento de webhooks (aberto para provedores)
+- `/health` - Verificação de saúde do sistema
+- `/metrics` - Métricas Prometheus
+- `/docs` - Documentação Swagger
+
+#### Como Usar a API Key
+
+A API key padrão para desenvolvimento está no arquivo `.env.example`:
+```
+API_KEY=dev-api-key-change-me
+```
+
+Para fazer requisições autenticadas, inclua o header `x-api-key`:
+
+```bash
+curl -H "x-api-key: dev-api-key-change-me" http://localhost:3300/transactions
+```
+
+#### Exemplos de Requisições Autenticadas
+
+**Listar transações (com autenticação):**
+```bash
+curl -H "x-api-key: dev-api-key-change-me" http://localhost:3300/transactions
+```
+
+**Listar transações (SEM autenticação - vai falhar!):**
+```bash
+curl http://localhost:3300/transactions
+# Resposta: {"statusCode":401,"message":"Unauthorized"}
+```
+
+**Sincronizar conta do Pluggy:**
+```bash
+curl -X POST -H "x-api-key: dev-api-key-change-me" \
+  "http://localhost:3300/sync/acc-123?provider=pluggy"
+```
+
+**Buscar uma transação específica:**
+```bash
+curl -H "x-api-key: dev-api-key-change-me" \
+  "http://localhost:3300/transactions/tx-pluggy-001"
+```
+
+#### Usando o Swagger UI com API Key
+
+1. Acesse: http://localhost:3300/docs
+2. Clique no botão **"Authorize"** (cadeado) no topo da página
+3. No campo "value", digite: `dev-api-key-change-me`
+4. Clique em **"Authorize"** e depois em **"Close"**
+5. Agora todas as requisições feitas pelo Swagger incluirão automaticamente a API key
+
+---
+
 ### 📋 Cenários de Teste
 
 Abra **uma nova janela/aba do terminal** para executar os comandos de teste.
@@ -186,6 +257,206 @@ curl -X POST http://localhost:4001/__emit/acc-123 \
 
 ---
 
+## 🎯 Testes E2E (Ponta a Ponta) - O Sistema Inteiro Funcionando
+
+### O que são testes E2E? (Explicado para sua avó!)
+
+**Testes E2E** verificam se TUDO funciona junto, do início ao fim.
+
+Imagine que você quer testar se um **carro funciona**:
+- ❌ Não é só testar o motor sozinho
+- ❌ Não é só testar as rodas sozinhas
+- ✅ É ligar, acelerar, frear e dirigir - **tudo junto**
+
+É a mesma coisa com nosso sistema:
+- ❌ Não é só verificar se o banco de dados funciona
+- ❌ Não é só verificar se a API funciona
+- ✅ É enviar dados de um banco, ver se o sistema entende, guarda e mostra - **tudo junto!**
+
+---
+
+### 1. O que vamos testar (explicação simples)
+
+Vamos verificar se o sistema consegue:
+1. ✅ **Receber** dados de bancos diferentes (Pluggy e Belvo)
+2. ✅ **Entender** cada formato diferente que cada banco usa
+3. ✅ **Transformar** esses dados em um formato padrão
+4. ✅ **Guardar** tudo no banco de dados
+5. ✅ **Mostrar** os dados depois, de um jeito fácil de ler
+
+---
+
+### 2. Teste 1: Enviar dinheiro do "banco Pluggy" 💳
+
+```bash
+# Simular que o banco Pluggy enviou um pagamento de R$ 100,50
+curl -X POST http://localhost:4001/__emit/acc-123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "accountId": "acc-123",
+    "transactionId": "tx-pluggy-001",
+    "amount": "100.50",
+    "date": "2023-04-22T10:30:00Z",
+    "description": "Pagamento de cliente"
+  }'
+```
+
+**O que acontece por trás (explicação simples):**
+1. O sistema **recebe** o aviso do banco
+2. **Verifica** se é realmente o banco (usando uma senha especial chamada HMAC)
+3. **Transforma** o formato do banco Pluggy no formato padrão do sistema
+4. **Guarda** no "caderninho" (banco de dados)
+5. **Responde** rápido: "Ok, recebi!"
+
+---
+
+### 3. Teste 2: Enviar dinheiro do "banco Belvo" 💰
+
+```bash
+# Simular que o banco Belvo enviou um pagamento de R$ 50,25
+curl -X POST http://localhost:4002/__emit/acc-456 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account_id": "acc-456",
+    "transaction_id": "tx-belvo-001",
+    "amount_in_cents": 5025,
+    "date": 1682163000,
+    "description": "Compra no mercado"
+  }'
+```
+
+**Diferença importante (explicação simples):**
+- O Belvo fala `"account_id"` enquanto Pluggy fala `"accountId"`
+- O Belvo manda valores em **centavos** (5025 = R$ 50,25)
+- O Pluggy manda valores **diretos** ("100.50")
+- **O sistema entende os dois e guarda tudo do mesmo jeito!** 🎉
+
+---
+
+### 4. Teste 3: Ver se os dados foram guardados 📋
+
+```bash
+# Pedir para ver todas as transações guardadas
+curl -H "x-api-key: dev-api-key-change-me" http://localhost:3000/transactions
+```
+
+**O que você deve ver:**
+- Uma lista com as duas transações (Pluggy e Belvo)
+- Ambas no **MESMO formato**, fácil de ler
+- Valores corretos: R$ 100,50 e R$ 50,25
+
+**Se não funcionar:** Verifique se adicionou o header `x-api-key` corretamente!
+
+---
+
+### 5. Teste 4: O sistema não deixa duplicar! 🚫
+
+```bash
+# Primeira vez: enviar uma transação
+curl -X POST http://localhost:4001/__emit/acc-123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "accountId": "acc-123",
+    "transactionId": "tx-duplicada",
+    "amount": "10.00",
+    "date": "2023-04-22T11:00:00Z",
+    "description": "Teste duplicado"
+  }'
+
+# Esperar 2 segundos e enviar NOVAMENTE a mesma coisa
+curl -X POST http://localhost:4001/__emit/acc-123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "accountId": "acc-123",
+    "transactionId": "tx-duplicada",
+    "amount": "10.00",
+    "date": "2023-04-22T11:00:00Z",
+    "description": "Teste duplicado"
+  }'
+```
+
+**O que acontece:**
+- **Primeira vez:** sistema guarda a transação ✅
+- **Segunda vez:** sistema reconhece que já viu essa transação e **IGNORA** 🚫
+- **Isso evita que o mesmo pagamento seja contado duas vezes!** (Imagina pagar a mesma conta duas vezes! 😱)
+
+---
+
+### 6. Teste 5: Ver as métricas (painel de controle) 📊
+
+```bash
+# Ver quantas transações foram recebidas, processadas, etc
+curl http://localhost:3000/metrics
+```
+
+**O que procurar (procure estas linhas):**
+
+| Métrica | Significado |
+|---------|-------------|
+| `webhooks_received_total` | Quantos avisos recebemos no total |
+| `webhooks_processed_total` | Quantos processamos com sucesso |
+| `webhooks_duplicates_total` | Quantos duplicados bloqueamos |
+
+**Exemplo de saída:**
+```
+# HELP webhooks_received_total Total number of webhooks received
+# TYPE webhooks_received_total counter
+webhooks_received_total 5
+webhooks_processed_total 4
+webhooks_duplicates_total 1
+```
+
+Isso significa:
+- Recebemos 5 webhooks
+- 4 foram processados com sucesso
+- 1 foi bloqueado porque era duplicado
+
+---
+
+### 7. Resumo: Fluxo Completo de um Teste E2E ✅
+
+```
+┌─────────────┐      ┌─────────────┐      ┌─────────────┐
+│   Você      │      │   Sistema   │      │  Banco de   │
+│  (usuário)  │      │  (HIVEPlace)│      │   Dados     │
+└─────────────┘      └─────────────┘      └─────────────┘
+      │                    │                    │
+      │  1. Enviar dados    │                    │
+      │───────────────────▶│                    │
+      │                    │  2. Verificar HMAC  │
+      │                    │  3. Transformar     │
+      │                    │  4. Guardar         │
+      │                    │───────────────────▶│
+      │                    │                    │
+      │  5. "Ok, recebi!"   │                    │
+      │◀───────────────────│                    │
+      │                    │                    │
+      │  6. Ver dados       │                    │
+      │───────────────────▶│                    │
+      │                    │  7. Buscar dados   │
+      │                    │───────────────────▶│
+      │                    │                    │
+      │  8. Lista de todos  │                    │
+      │◀───────────────────│                    │
+      │                    │                    │
+```
+
+---
+
+### 8. Parabéns! Você sabe fazer testes E2E! 🎉
+
+Se você conseguiu fazer os 5 testes acima, parabéns! Você acabou de verificar que:
+
+1. ✅ O sistema **recebe** dados de diferentes bancos
+2. ✅ O sistema **entende** formatos diferentes
+3. ✅ O sistema **guarda** os dados corretamente
+4. ✅ O sistema **não duplica** transações
+5. ✅ Você consegue **ver** os dados depois
+
+**Isso é o equivalente a testar que um carro anda, freia, e não explode!** 🚗💨
+
+---
+
 ## 🕵️ Verificando Resultados
 
 Vamos consultar os dados processados:
@@ -216,6 +487,22 @@ curl http://localhost:3300/health
 1. Abra seu navegador
 2. Acesse: http://localhost:3300/docs
 3. Explore a interface interativa para ver todos os endpoints disponíveis
+4. **Dica:** Clique no botão "Authorize" (cadeado) para configurar sua API key e testar os endpoints protegidos diretamente pelo Swagger
+
+### Consultar Transações (Endpoints Protegidos)
+
+Os endpoints `/transactions` e `/sync/:accountId` requerem autenticação:
+
+**Listar todas as transações:**
+```bash
+curl -H "x-api-key: dev-api-key-change-me" http://localhost:3300/transactions
+```
+
+**Sincronizar transações de uma conta:**
+```bash
+curl -X POST -H "x-api-key: dev-api-key-change-me" \
+  "http://localhost:3300/sync/acc-123?provider=pluggy"
+```
 
 ---
 
@@ -285,6 +572,26 @@ npm install
 - No Linux, execute com `sudo docker compose up`
 - No Mac/Windows, execute o terminal como administrador
 
+#### ❌ "401 Unauthorized" ao acessar endpoints
+
+**Problema:** Você está tentando acessar um endpoint protegido sem a API key.
+
+**Endpoints que requerem autenticação:**
+- `GET /transactions`
+- `GET /transactions/:id`
+- `POST /sync/:accountId`
+
+**Solução:**
+Inclua o header `x-api-key` na requisição:
+```bash
+curl -H "x-api-key: dev-api-key-change-me" http://localhost:3300/transactions
+```
+
+**Alternativa pelo Swagger:**
+1. Acesse http://localhost:3300/docs
+2. Clique em "Authorize" (cadeado)
+3. Digite `dev-api-key-change-me` e clique em "Authorize"
+
 #### ❌ Banco de dados corrompido
 
 **Problema:** Erros estranhos de query ou dados inconsistentes.
@@ -329,6 +636,18 @@ integration-hub/
 4. **Deduplicação:** Verifica se a transação já foi processada (idempotência)
 5. **Persistência:** Salva no banco de dados
 6. **Resposta:** Retorna 202 Accepted rapidamente
+
+### Endpoints Protegidos por API Key
+
+Os seguintes endpoints requerem autenticação via API key para serem acessados:
+
+| Endpoint | Descrição |
+|----------|-----------|
+| `GET /transactions` | Lista todas as transações salvas |
+| `GET /transactions/:id` | Busca uma transação pelo ID |
+| `POST /sync/:accountId` | Força sincronização com o provedor |
+
+Os webhooks, health check e métricas permanecem abertos (sem autenticação).
 
 ### Diferenças entre Provedores
 
@@ -395,14 +714,16 @@ Se algo não funcionar mesmo seguindo os passos:
 
 ### Endpoints e Portas
 
-| Serviço | URL | Propósito |
-|---------|-----|-----------|
-| App Principal | http://localhost:3300 | API do hub |
-| Swagger Docs | http://localhost:3300/docs | Documentação interativa |
-| Métricas | http://localhost:3300/metrics | Prometheus metrics |
-| Health Check | http://localhost:3300/health | Status do sistema |
-| Pluggy Mock | http://localhost:4001 | Simulador Pluggy |
-| Belvo Mock | http://localhost:4002 | Simulador Belvo |
+| Serviço | URL | Propósito | Autenticação |
+|---------|-----|-----------|--------------|
+| App Principal | http://localhost:3300 | API do hub | - |
+| Swagger Docs | http://localhost:3300/docs | Documentação interativa | Opcional* |
+| Métricas | http://localhost:3300/metrics | Prometheus metrics | Não requer |
+| Health Check | http://localhost:3300/health | Status do sistema | Não requer |
+| Pluggy Mock | http://localhost:4001 | Simulador Pluggy | Não requer |
+| Belvo Mock | http://localhost:4002 | Simulador Belvo | Não requer |
+
+*\* O Swagger permite configurar a API key para testar endpoints protegidos.
 
 ### Contas de Teste
 
