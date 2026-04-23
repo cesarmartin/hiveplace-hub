@@ -4,6 +4,8 @@
 
 Este é um **MVP focado** construído sob um prazo curto. Ele prioriza profundidade em vez de amplitude: ingestão resiliente, idempotência, observabilidade e clara separação entre contratos específicos de provedores e o modelo canônico. Veja `DECISIONS.md` para as escolhas e concessões.
 
+https://github.com/user-attachments/assets/e29afe92-58bc-4cd0-8428-8c751d4d13d4
+
 ---
 
 ## Arquitetura
