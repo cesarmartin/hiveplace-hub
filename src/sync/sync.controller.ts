@@ -5,6 +5,7 @@ import {
   Post,
   Query,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiOperation,
@@ -12,10 +13,18 @@ import {
   ApiQuery,
   ApiResponse,
   ApiTags,
+  ApiHeader,
 } from '@nestjs/swagger';
 import { SyncService } from './sync.service';
+import { ApiKeyGuard } from '../common/guards/api-key.guard';
 
 @ApiTags('sync')
+@ApiHeader({
+  name: 'x-api-key',
+  description: 'API key for authentication',
+  required: true,
+})
+@UseGuards(ApiKeyGuard)
 @Controller('sync')
 export class SyncController {
   private readonly logger = new Logger(SyncController.name);

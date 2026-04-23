@@ -13,7 +13,7 @@ services:
       DATABASE_URL: "file:/data/hiveplace.db"
       PLUGGY_WEBHOOK_SECRET: ${PLUGGY_WEBHOOK_SECRET:-dev-pluggy-secret}
       BELVO_WEBHOOK_SECRET: ${BELVO_WEBHOOK_SECRET:-dev-belvo-secret}
-      API_KEY: ${API_KEY:-dev-api-key}
+      API_KEY: ${API_KEY:-dev-api-key-change-me}
       PLUGGY_MOCK_URL: http://pluggy-mock:4001
       BELVO_MOCK_URL: http://belvo-mock:4002
     volumes:

@@ -4,17 +4,26 @@ import {
   Param,
   Query,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiOperation,
   ApiParam,
   ApiResponse,
   ApiTags,
+  ApiHeader,
 } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
 import { ListTransactionsDto } from './list-transactions.dto';
+import { ApiKeyGuard } from '../common/guards/api-key.guard';
 
 @ApiTags('transactions')
+@ApiHeader({
+  name: 'x-api-key',
+  description: 'API key for authentication',
+  required: true,
+})
+@UseGuards(ApiKeyGuard)
 @Controller('transactions')
 export class TransactionsController {
   private readonly logger = new Logger(TransactionsController.name);

@@ -19,6 +19,7 @@ export const circuitBreakerStateGauge = new Gauge({
 export class CircuitBreakerWrapper {
   private readonly breaker: CircuitBreaker;
   private readonly provider: string;
+  private _currentState: CircuitBreakerState = 'CLOSED';
 
   constructor(
     provider: string,
@@ -39,16 +40,19 @@ export class CircuitBreakerWrapper {
 
     this.breaker.on('open', () => {
       console.log(`[CircuitBreaker] ${provider} OPEN`);
+      this._currentState = 'OPEN';
       circuitBreakerStateGauge.labels(provider).set(1);
     });
 
     this.breaker.on('halfOpen', () => {
       console.log(`[CircuitBreaker] ${provider} HALF_OPEN`);
+      this._currentState = 'HALF_OPEN';
       circuitBreakerStateGauge.labels(provider).set(2);
     });
 
     this.breaker.on('close', () => {
       console.log(`[CircuitBreaker] ${provider} CLOSED`);
+      this._currentState = 'CLOSED';
       circuitBreakerStateGauge.labels(provider).set(0);
     });
 
@@ -67,13 +71,7 @@ export class CircuitBreakerWrapper {
    * Get the current state of the circuit breaker.
    */
   get currentState(): CircuitBreakerState {
-    if (this.breaker.status.stats.failures > 0 && this.breaker.status.stats.isOpen) {
-      return 'OPEN';
-    }
-    if (this.breaker.status.stats.isHalfOpen) {
-      return 'HALF_OPEN';
-    }
-    return 'CLOSED';
+    return this._currentState;
   }
 
   /**
@@ -84,8 +82,8 @@ export class CircuitBreakerWrapper {
       failures: this.breaker.status.stats.failures,
       successes: this.breaker.status.stats.successes,
       rejects: this.breaker.status.stats.rejects,
-      isOpen: this.breaker.status.stats.isOpen,
-      isHalfOpen: this.breaker.status.stats.isHalfOpen,
+      isOpen: this._currentState === 'OPEN',
+      isHalfOpen: this._currentState === 'HALF_OPEN',
     };
   }
 }
